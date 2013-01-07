@@ -1,91 +1,83 @@
-;;; http://butunclebob.com/ArticleS.UncleBob.TheBowlingGameKata
 
 (defclass game ()
   ((rolls :initform (make-array '(21) :element-type 'integer
                                       :initial-element 0
                                       :fill-pointer 0)
-          :reader rolls)))
+          :accessor rolls)))
 
 (defgeneric roll (game pins)
   (:method ((game game) (pins integer))
-     (let ((rolls (rolls game)))
-       (with-accessors ((index fill-pointer)) rolls
-         (prog1
-             (setf (aref rolls index) pins)
-           (incf index))))))
+     (with-accessors ((index fill-pointer)) (rolls game)
+       (prog1
+           (setf (aref (rolls game) index) pins)
+         (incf index)))))
 
-(defgeneric sum-of (game index count)
-  (:method ((game game) (index integer) (count integer))
-     (let ((rolls (rolls game)))
-       (loop :for ii :from 0 :below count
-             :summing (aref rolls (+ ii index))))))
 
-(defgeneric normal-score (game index)
+(defgeneric regular-score (game index)
   (:method ((game game) (index integer))
-   (sum-of game index 2)))
-
-(defgeneric spare-p (game index)
-  (:method ((game game) (index integer))
-     (= 10 (sum-of game index 2))))
-
-(defgeneric spare-score (game index)
-  (:method ((game game) (index integer))
-     (sum-of game index 3)))
+    (let ((rolls (rolls game)))
+      (+ (aref rolls index) (aref rolls (1+ index))))))
 
 (defgeneric strike-p (game index)
   (:method ((game game) (index integer))
-     (= 10 (aref (rolls game) index))))
+    (= 10 (aref (rolls game) index))))
 
 (defgeneric strike-score (game index)
   (:method ((game game) (index integer))
-     (sum-of game index 3)))
+    (+ 10
+       (aref (rolls game) (1+ index))
+       (aref (rolls game) (+ index 2)))))
+
+(defgeneric spare-p (game index)
+  (:method ((game game) (index integer))
+    (= 10 (regular-score game index))))
+
+(defgeneric spare-score (game index)
+  (:method ((game game) (index integer))
+    (+ 10 (aref (rolls game) (+ index 2)))))
+
+(defgeneric score-frame (game index)
+  (:method ((game game) (index integer))
+    (cond
+     ((strike-p game index) (values (strike-score game index) 1))
+     ((spare-p game index) (values (spare-score game index) 2))
+     (t (values (regular-score game index) 2)))))
 
 (defgeneric score (game)
   (:method ((game game))
-      (loop :with index = 0
-            :for frame :from 1 :to 10
-            :summing (cond
-                      ((strike-p game index)
-                          (prog1
-                              (strike-score game index)
-                            (incf index 1)))
-                      
-                      ((spare-p game index)
-                          (prog1
-                              (spare-score game index)
-                            (incf index 2)))
-                      
-                      (t  (prog1
-                              (normal-score game index)
-                            (incf index 2)))))))
+     (loop :for frame :from 1 :to 10
+           :with index = 0
+           :summing (multiple-value-bind (score inc) (score-frame game index)
+                      (incf index inc)
+                      score))))
 
-(ql:quickload :nst)
-
-(nst:def-fixtures game-instance ()
-   (game))
-
-(defgeneric roll-many (game &key initial rolls pins)
-  (:method ((game game) &key initial rolls pins)
+(defgeneric roll-many (game &key rolls pins)
+  (:method (game &key initial rolls (pins 0))
      (mapc (lambda (pins)
              (roll game pins))
            initial)
      (dotimes (ii rolls (score game))
        (roll game pins))))
 
+(ql:quickload :nst)
+
+(nst:def-fixtures game-instance ()
+  (game))
+
 (nst:def-test-group bowling-game-kata-tests (game-instance)
         (:each-setup (setf game (make-instance 'game)))
         
   (nst:def-test all-gutter-balls-test (:equal 0)
-     (roll-many game :rolls 20 :pins 0))
+    (roll-many game :rolls 20))
   
   (nst:def-test all-one-balls-test (:equal 20)
-     (roll-many game :rolls 20 :pins 1))
+    (roll-many game :rolls 20 :pins 1))
   
   (nst:def-test spare-test (:equal 14)
-     (roll-many game :initial '(5 5 1 2) :rolls 16 :pins 0))
+    (roll-many game :initial '(5 5 1 2) :rolls 16))
   
   (nst:def-test strike-test (:equal 19)
-     (roll-many game :initial '(10 1 2 3) :rolls 15 :pins 0))
+    (roll-many game :initial '(10 1 2 3 0) :rolls 14))
   
   (nst:def-test perfect-game-test (:equal 300)
-     (roll-many game :rolls 12 :pins 10)))
+    (roll-many game :rolls 12 :pins 10)))
