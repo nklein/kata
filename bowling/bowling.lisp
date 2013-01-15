@@ -1,8 +1,10 @@
+;;; http://butunclebob.com/ArticleS.UncleBob.TheBowlingGameKata
+
 (defclass game ()
   ((rolls :initform (make-array '(21) :element-type 'integer
                                       :initial-element 0
                                       :fill-pointer 0)
-          :accessor rolls)))
+          :reader rolls)))
 
 (defgeneric roll (game pins)
   (:method ((game game) (pins integer))
@@ -28,27 +30,28 @@
   (+ 10 (aref (rolls game) (+ index 2))))
 
 (defun regular-score (game index)
-  (+ (two-ball-sum game index)))
+  (two-ball-sum game index))
 
 (defgeneric score (game)
   (:method ((game game))
-    (loop :for ii :from 0 :to (fill-pointer (rolls game))
+           
+    (loop :with rolls = (rolls game)
+          :for index :from 0 :below (fill-pointer rolls)
           :for frame :from 1 :to 10
           :summing (cond
-                    ((strike-p game ii) (strike-score game ii))
-                    ((spare-p game ii) (prog1
-                                           (spare-score game ii)
-                                         (incf ii)))
+                    ((strike-p game index) (strike-score game index))
+                    ((spare-p game index) (prog1
+                                              (spare-score game index)
+                                            (incf index)))
                     (t (prog1
-                           (regular-score game ii)
-                         (incf ii)))))))
+                           (regular-score game index)
+                         (incf index)))))))
 
-(defgeneric roll-many (game &key initial rolls pins)
-  (:method ((game game) &key initial rolls pins)
-    (dolist (pins initial)
-      (roll game pins))
-    (dotimes (ii rolls (score game))
-      (roll game pins))))
+(defun roll-many (game &key initial rolls pins)
+  (dolist (pp initial)
+    (roll game pp))
+  (dotimes (ii rolls (score game))
+    (roll game pins)))
 
 (ql:quickload :nst)
 
@@ -56,8 +59,8 @@
   (game))
 
 (nst:def-test-group bowling-game-kata-tests (game-instance)
-        (:each-setup (setf game (make-instance 'game)))
-        
+          (:each-setup (setf game (make-instance 'game)))
+          
   (nst:def-test all-gutter-balls-test (:equal 0)
     (roll-many game :rolls 20 :pins 0))
   
@@ -70,5 +73,5 @@
   (nst:def-test strike-test (:equal 19)
     (roll-many game :initial '(10 1 2 3 0) :rolls 14 :pins 0))
   
-  (nst:def-test perfect-game-test (:equal 300)
+  (nst:def-test perfect-test (:equal 300)
     (roll-many game :rolls 12 :pins 10)))
