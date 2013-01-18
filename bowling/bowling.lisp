@@ -34,24 +34,23 @@
 
 (defgeneric score (game)
   (:method ((game game))
-           
-    (loop :with rolls = (rolls game)
-          :for index :from 0 :below (fill-pointer rolls)
+    (loop :with ii = 0
           :for frame :from 1 :to 10
-          :summing (cond
-                    ((strike-p game index) (strike-score game index))
-                    ((spare-p game index) (prog1
-                                              (spare-score game index)
-                                            (incf index)))
-                    (t (prog1
-                           (regular-score game index)
-                         (incf index)))))))
+          :summing (flet ((add-to-score (amount &optional (balls 2))
+                            (incf ii balls)
+                            amount))
+                     (cond
+                      ((strike-p game ii) (add-to-score (strike-score game ii)
+                                                        1))
+                      ((spare-p game ii) (add-to-score (spare-score game ii)))
+                      (t (add-to-score (regular-score game ii))))))))
 
-(defun roll-many (game &key initial rolls pins)
-  (dolist (pp initial)
-    (roll game pp))
-  (dotimes (ii rolls (score game))
-    (roll game pins)))
+(defgeneric roll-many (game &key initial rolls pins)
+  (:method ((game game) &key initial rolls pins)
+     (dolist (pp initial)
+       (roll game pp))
+     (dotimes (ii rolls (score game))
+       (roll game pins))))
 
 (ql:quickload :nst)
 
@@ -59,19 +58,19 @@
   (game))
 
 (nst:def-test-group bowling-game-kata-tests (game-instance)
-          (:each-setup (setf game (make-instance 'game)))
-          
+         (:each-setup (setf game (make-instance 'game)))
+         
   (nst:def-test all-gutter-balls-test (:equal 0)
     (roll-many game :rolls 20 :pins 0))
   
   (nst:def-test all-one-balls-test (:equal 20)
     (roll-many game :rolls 20 :pins 1))
-  
+
   (nst:def-test spare-test (:equal 14)
     (roll-many game :initial '(5 5 1 2) :rolls 16 :pins 0))
   
   (nst:def-test strike-test (:equal 19)
     (roll-many game :initial '(10 1 2 3 0) :rolls 14 :pins 0))
   
-  (nst:def-test perfect-test (:equal 300)
+  (nst:def-test perfect-game-test (:equal 300)
     (roll-many game :rolls 12 :pins 10)))
