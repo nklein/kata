@@ -32,25 +32,26 @@
 (defun regular-score (game index)
   (two-ball-sum game index))
 
+(defun frame-score (game index)
+  (cond
+   ((strike-p game index) (values (strike-score game index) 1))
+   ((spare-p game index) (values (spare-score game index) 2))
+   (t (values (regular-score game index) 2))))
+
 (defgeneric score (game)
   (:method ((game game))
     (loop :with ii = 0
           :for frame :from 1 :to 10
-          :summing (flet ((add-to-score (amount &optional (balls 2))
-                            (incf ii balls)
-                            amount))
-                     (cond
-                      ((strike-p game ii) (add-to-score (strike-score game ii)
-                                                        1))
-                      ((spare-p game ii) (add-to-score (spare-score game ii)))
-                      (t (add-to-score (regular-score game ii))))))))
+          :summing (multiple-value-bind (score balls) (frame-score game ii)
+                     (incf ii balls)
+                     score))))
 
 (defgeneric roll-many (game &key initial rolls pins)
   (:method ((game game) &key initial rolls pins)
-     (dolist (pp initial)
-       (roll game pp))
-     (dotimes (ii rolls (score game))
-       (roll game pins))))
+    (dolist (pp initial)
+      (roll game pp))
+    (dotimes (ii rolls (score game))
+      (roll game pins))))
 
 (ql:quickload :nst)
 
@@ -58,14 +59,14 @@
   (game))
 
 (nst:def-test-group bowling-game-kata-tests (game-instance)
-         (:each-setup (setf game (make-instance 'game)))
-         
+        (:each-setup (setf game (make-instance 'game)))
+        
   (nst:def-test all-gutter-balls-test (:equal 0)
     (roll-many game :rolls 20 :pins 0))
   
   (nst:def-test all-one-balls-test (:equal 20)
     (roll-many game :rolls 20 :pins 1))
-
+  
   (nst:def-test spare-test (:equal 14)
     (roll-many game :initial '(5 5 1 2) :rolls 16 :pins 0))
   
