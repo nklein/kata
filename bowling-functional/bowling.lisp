@@ -1,84 +1,82 @@
 ;;; http://butunclebob.com/ArticleS.UncleBob.TheBowlingGameKata
 
-;;; Start: Tue Feb 26 23:05:46 CST 2013
-;;; End: Tue Feb 26 23:33:29 CST 2013
-;;; SLOC: 59
+;;; Start: Sun May 12 22:23:08 CDT 2013
+;;; End:   Sun May 12 22:58:00 CDT 2013
+;;; SLOC:  59
 
 (defclass game ()
-  ((rolls :initarg :rolls :reader rolls))
+  ((rolls :reader rolls
+          :initarg :rolls))
   (:default-initargs :rolls nil))
 
 (defgeneric roll (game pins)
   (:method ((game game) (pins integer))
-     (make-instance 'game :rolls (append (rolls game) (list pins)))))
+     (make-instance 'game :rolls (append (rolls game)
+                                         (list pins)))))
 
 (defun two-ball-sum (rolls)
   (+ (first rolls) (second rolls)))
 
-(defun strike-p (rolls)
-  (= 10 (first rolls)))
-
-(defun strike-score (rolls)
-  (+ 10 (two-ball-sum (rest rolls))))
-
 (defun spare-p (rolls)
-  (= 10 (two-ball-sum rolls)))
+  (= (two-ball-sum rolls) 10))
 
 (defun spare-score (rolls)
   (+ 10 (third rolls)))
 
-(defun regular-score (rolls)
-  (two-ball-sum rolls))
+(defun strike-p (rolls)
+  (= (first rolls) 10))
 
-(defun score-rolls (rolls frame)
-  (flet ((accumulate (value &optional (next-fn #'cddr))
-           (+ value (score-rolls (funcall next-fn rolls) (1+ frame)))))
+(defun strike-score (rolls)
+  (+ 10 (second rolls) (third rolls)))
+
+(defun rolls-score (rolls frame accum)
+  (flet ((add (amount &optional (next-frame-fn #'cddr))
+           (rolls-score (funcall next-frame-fn rolls)
+                        (1+ frame)
+                        (+ accum amount))))
     (cond
-     ((null rolls) 0)
-     ((< 10 frame) 0)
-     ((strike-p rolls) (accumulate (strike-score rolls) #'cdr))
-     ((spare-p rolls) (accumulate (spare-score rolls)))
-     (t (accumulate (regular-score rolls))))))
+     ((< 10 frame) accum)
+     ((strike-p rolls) (add (strike-score rolls) #'cdr))
+     ((spare-p rolls) (add (spare-score rolls)))
+     (t (add (two-ball-sum rolls))))))
 
 (defgeneric score (game)
   (:method ((game game))
-     (score-rolls (rolls game) 1)))
+    (rolls-score (rolls game) 1 0)))
 
-(defun roll-multiple-times (game &key pins count)
-  (if (plusp count)
-      (roll-multiple-times (roll game pins) :pins pins :count (1- count))
-    game))
-
-(defun roll-list (game list)
-  (if (null list)
-      game
-    (roll-list (roll game (first list)) (rest list))))
-
-(defun roll-many (game &key initial pins count)
-  (roll-multiple-times (roll-list game initial) :pins pins :count count))
+(defun roll-many (game &key initial rolls pins)
+  (cond
+   (initial (roll-many (roll game (first initial))
+                       :initial (rest initial)
+                       :rolls rolls
+                       :pins pins))
+   ((plusp rolls) (roll-many (roll game pins) :rolls (1- rolls) :pins pins))
+   (t game)))
 
 (ql:quickload :nst)
 
 (nst:def-criterion (:bowling-score (target) (game))
   (let ((score (score game)))
-    (if (= score target)
-        (nst:make-success-report)
-      (nst:make-failure-report :format "Expected score of ~A but got ~A"
-                               :args (list target score)))))
+    (cond
+     ((= score target) (nst:make-success-report))
+     (t (nst:make-failure-report :format "Expected score ~D but got ~S"
+                                 :args (list target score))))))
 
-(nst:def-test-group bowling-game-kata-tests ()
-  (nst:def-test all-gutter-balls-test (:bowling-score 0)
-    (roll-many (make-instance 'game) :pins 0 :count 20))
-  
-  (nst:def-test all-one-balls-test (:bowling-score 20)
-    (roll-many (make-instance 'game) :pins 1 :count 20))
-  
-  (nst:def-test spare-test (:bowling-score 14)
-    (roll-many (make-instance 'game) :initial '(5 5 1 2) :pins 0 :count 16))
-  
-  (nst:def-test strike-test (:bowling-score 19)
-    (roll-many (make-instance 'game) :initial '(10 1 2 3 0)
-                                     :pins 0 :count 14))
-  
-  (nst:def-test perfect-game-test (:bowling-score 300)
-    (roll-many (make-instance 'game) :pins 10 :count 12)))
+(nst:def-fixtures game-ins ()
+  (game (make-instance 'game)))
+
+(nst:def-test-group bowling-tests (game-ins)
+  (nst:def-test gutter-ball-test (:bowling-score 0)
+    (roll-many game :rolls 20 :pins 0))
+
+  (nst:def-test all-ones-test (:bowling-score 20)
+    (roll-many game :rolls 20 :pins 1))
+
+  (nst:def-test spare-test (:bowling-score 15)
+    (roll-many game :initial '(5 5 2 1) :rolls 16 :pins 0))
+
+  (nst:def-test strike-test (:bowling-score 21)
+    (roll-many game :initial '(10 3 2 1 0) :rolls 14 :pins 0))
+
+  (nst:def-test perfect-game (:bowling-score 300)
+    (roll-many game :rolls 12 :pins 10)))
