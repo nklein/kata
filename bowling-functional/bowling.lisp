@@ -1,8 +1,9 @@
 ;;; http://butunclebob.com/ArticleS.UncleBob.TheBowlingGameKata
+;;; http://nklein.com/2013/01/bowling-game-kata-in-common-lisp
 
-;;; Start: Wed Aug 14 11:24:35 CDT 2013
-;;; End: Wed Aug 14 11:56:07 CDT 2013
-;;; SLOC: 50
+;;; Start: Wed Aug 14 18:58:57 CDT 2013
+;;; End: Wed Aug 14 19:22:38 CDT 2013
+;;; SLOC: 51
 
 (defclass game ()
   ((rolls :initarg :rolls :reader rolls))
@@ -30,43 +31,45 @@
   (flet ((add (points &optional (next-fn #'cddr))
            (score-rolls (funcall next-fn rolls) (+ score points) (1+ frame))))
     (cond
-      ((or (null rolls) (< 10 frame)) score)
-      ((strike-p rolls) (add (strike-score rolls) #'cdr))
-      ((spare-p rolls) (add (spare-score rolls)))
-      (t (add (two-ball-sum rolls))))))
+     ((< 10 frame) score)
+     ((strike-p rolls) (add (strike-score rolls) #'cdr))
+     ((spare-p rolls) (add (spare-score rolls)))
+     (t (add (two-ball-sum rolls))))))
 
 (defmethod score ((game game))
   (score-rolls (rolls game) 0 1))
 
 (ql:quickload :nst)
 
-(defun roll-many (game &key initial pins rolls)
+(defun roll-many (game &key pins times)
   (cond
-    (initial (roll-many (roll game (first initial))
-                        :initial (rest initial) :pins pins :rolls rolls))
-    ((zerop rolls) game)
-    (t (roll-many (roll game pins) :pins pins :rolls (1- rolls)))))
+   ((zerop times) game)
+   (t (roll-many (roll game pins) :pins pins :times (1- times)))))
 
-(nst:def-criterion (:bowling-score (target) (&rest roll-options))
-  (let* ((game (apply #'roll-many (make-instance 'game) roll-options))
-         (got (score game)))
+(nst:def-criterion (:bowling-score (target) (&key initial pins times))
+  (let* ((game (make-instance 'game :rolls initial))
+         (final (roll-many game :pins pins :times times))
+         (got (score final)))
     (if (= got target)
         (nst:make-success-report)
-        (nst:make-failure-report :format "Expected ~D but got ~A~%"
-                                 :args (list target got)))))
+      (nst:make-failure-report :format "Expected ~D but got ~A"
+                               :args (list got target)))))
 
-(nst:def-test-group bowling-game-kata-tests ()
-  (nst:def-test gutter-game-test (:bowling-score 0)
-    :rolls 20 :pins 0)
+(nst:def-test-group bowling-game-tests ()
+  (nst:def-test can-roll-test (:true)
+    (roll (make-instance 'game) 1))
+
+  (nst:def-test zero-game-test (:bowling-score 0)
+    :pins 0 :times 20)
 
   (nst:def-test ones-game-test (:bowling-score 20)
-    :rolls 20 :pins 1)
+    :pins 1 :times 20)
 
   (nst:def-test spare-test (:bowling-score 14)
-    :initial '(5 5 1 2) :rolls 16 :pins 0)
+    :initial '(5 5 1 2) :pins 0 :times 16)
 
   (nst:def-test strike-test (:bowling-score 19)
-    :initial '(10 1 2 3 0) :rolls 16 :pins 0)
+    :initial '(10 1 2 3 0) :pins 0 :times 14)
 
   (nst:def-test perfect-game-test (:bowling-score 300)
-    :rolls 12 :pins 10))
+    :pins 10 :times 12))
